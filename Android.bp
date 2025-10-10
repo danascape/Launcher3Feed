@@ -1,0 +1,29 @@
+android_app {
+    name: "Launcher3FeedHelloWorld",
+    defaults: ["platform_app_defaults"],
+
+    platform_apis: true,
+    certificate: "platform",
+    system_ext_specific: true,
+    privileged: true,
+
+    srcs: [
+        "app/src/main/java/**/*.java",
+        "app/src/main/java/**/*.kt",
+        "google-gsa/src/main/java/**/*.java",
+        "google-gsa/src/main/java/**/*.kt",
+    ],
+
+    static_libs: [
+        "androidx.core_core",
+        "androidx.appcompat_appcompat",
+        "com.google.android.material_material",
+    ],
+
+    resource_dirs: ["app/src/main/res"],
+    manifest: "app/src/main/AndroidManifest.xml",
+
+    optimize: {
+        enabled: false,
+    },
+}

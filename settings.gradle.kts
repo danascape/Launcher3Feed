@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Launcher3FeedHelloWorld"
 include(":app")
- 
+include(":google-gsa")
+project(":google-gsa").projectDir = File(rootDir, "google-gsa")

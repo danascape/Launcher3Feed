@@ -1,19 +1,13 @@
 plugins {
-    alias(libs.plugins.android.application)
+    alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
 }
 
 android {
-    namespace = "dev.danascape.launcher3feed.helloworld"
+    namespace = "com.google.android.libraries"
     compileSdk = 36
-
     defaultConfig {
-        applicationId = "dev.danascape.launcher3feed.helloworld"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -31,9 +25,15 @@ android {
         getByName("main") {
             java.srcDirs("src/main/java")
             aidl.srcDirs("src/main/aidl")
-            assets.srcDirs("src/main/assets")
             res.srcDirs("src/main/res")
         }
+    }
+
+    buildFeatures {
+        dataBinding = true
+        viewBinding = true
+        buildConfig = true
+        aidl = true
     }
 
     compileOptions {
@@ -44,25 +44,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-
-    buildFeatures {
-        viewBinding = true
-        buildConfig = true
-        aidl = true
-    }
 }
 
 dependencies {
-    implementation(project(":google-gsa"))
-
-    // Core Android dependencies only
-    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.material)
-    implementation(libs.androidx.activity)
-    implementation(libs.androidx.constraintlayout)
 
-    // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
