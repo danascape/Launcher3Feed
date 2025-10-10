@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "PvotFeed"
 include(":app")
- 
+include(":google-gsa")
+project(":google-gsa").projectDir = File(rootDir, "google-gsa")
