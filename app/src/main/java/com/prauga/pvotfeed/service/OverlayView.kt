@@ -1,11 +1,16 @@
 package com.prauga.pvotfeed.service
 
+import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.PopupMenu
@@ -13,6 +18,11 @@ import android.widget.Toast
 import com.google.android.libraries.gsa.d.a.OverlayController
 import com.prauga.pvotfeed.FeedApp
 import com.prauga.pvotfeed.R
+import com.prauga.pvotfeed.widget.data.WidgetDataStore
+import com.prauga.pvotfeed.widget.helper.WidgetPickerHelper
+import com.prauga.pvotfeed.widget.manager.WidgetHostManager
+import com.prauga.pvotfeed.widget.view.WidgetContainerView
+import com.prauga.pvotfeed.widget.view.WidgetPickerView
 
 class OverlayView(private val context: Context) : OverlayController(context, R.style.AppTheme, R.style.WindowTheme),
     OverlayBridge.OverlayBridgeCallback {
@@ -20,8 +30,16 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     private lateinit var rootView: View
     private lateinit var btnEdit: Button
     private lateinit var btnDone: Button
+    private lateinit var widgetContainer: WidgetContainerView
+    private lateinit var widgetPickerView: WidgetPickerView
+
+    // Widget management components
+    private lateinit var widgetHostManager: WidgetHostManager
+    private lateinit var widgetPickerHelper: WidgetPickerHelper
+    private lateinit var widgetDataStore: WidgetDataStore
 
     private var isEditMode: Boolean = false
+    private lateinit var gestureDetector: GestureDetector
 
     companion object {
         private const val TAG = "OverlayView"
@@ -32,25 +50,100 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
         Log.d(TAG, "onCreate: Initializing OverlayView")
 
         if (container != null) {
-            rootView = View.inflate(context, R.layout.overlay_layout, null)
+            // Use simpler layout for testing
+            rootView = View.inflate(context, R.layout.overlay_layout_simple, null)
             container.addView(rootView)
             Log.d(TAG, "Content view added to container")
+
+            // Debug: Check if rootView is properly initialized
+            Log.d(TAG, "RootView class: ${rootView.javaClass.simpleName}")
+            Log.d(TAG, "RootView clickable: ${rootView.isClickable}")
+            Log.d(TAG, "RootView longClickable: ${rootView.isLongClickable}")
         } else {
             Log.e(TAG, "Container is null!")
         }
 
+        // Initialize gesture detector
+        initGestureDetector()
+
+        // Initialize headers first
         initEditHeader()
+
+        // Initialize widget components
+        initializeWidgetSystem()
+
+        // Setup touch listeners after all views are initialized
         setupTouchListeners()
 
         // Register callback
         FeedApp.bridge.setCallback(this)
 
+        // Try to intercept touch events on the window
+        setupWindowTouchInterception()
+
         Log.d(TAG, "OverlayView created successfully")
     }
 
+    private fun initializeWidgetSystem() {
+        // Initialize widget managers
+        widgetHostManager = WidgetHostManager(context)
+        widgetPickerHelper = WidgetPickerHelper(context)
+        widgetDataStore = WidgetDataStore(context)
+
+        // Find or create widget container
+        widgetContainer = rootView.findViewById(R.id.widget_container)
+            ?: WidgetContainerView(context).also { container ->
+                // If not in layout, add it programmatically
+                val parentView = rootView as? android.view.ViewGroup
+                parentView?.addView(container)
+            }
+
+        // Initialize widget picker view
+        widgetPickerView = rootView.findViewById(R.id.widgetPickerView)
+        if (widgetPickerView == null) {
+            Log.e(TAG, "Widget picker view not found in layout, creating programmatically")
+            widgetPickerView = WidgetPickerView(context).also { picker ->
+                // If not in layout, add it programmatically
+                val parentView = rootView as? android.view.ViewGroup
+                parentView?.addView(picker)
+            }
+        } else {
+            Log.d(TAG, "Widget picker view found in layout")
+        }
+
+        // Set up widget picker listeners
+        widgetPickerView.setOnWidgetSelectedListener { widgetInfo ->
+            Log.d(TAG, "Widget selected from picker: ${widgetInfo.label}")
+            Log.d(TAG, "Provider: ${widgetInfo.provider}")
+            addWidgetDirectly(widgetInfo)
+        }
+        Log.d(TAG, "Widget selection listener set on picker view")
+
+        widgetPickerView.setOnCloseListener {
+            widgetPickerView.hide()
+        }
+
+        // Restore previously saved widgets
+        restoreSavedWidgets()
+
+        Log.d(TAG, "Widget system initialized")
+    }
+
+    private fun restoreSavedWidgets() {
+        val savedWidgets = widgetDataStore.loadAllWidgets()
+        Log.d(TAG, "Restoring ${savedWidgets.size} saved widgets")
+
+        // TODO: Restore widgets from saved data
+        // This would recreate the widget views from saved widget IDs
+    }
+
     private fun setupTouchListeners() {
-        // Long press to show buttons when not in edit mode
-        rootView.setOnLongClickListener {
+        // Get references to all interactive views
+        val scrollView = rootView.findViewById<View>(R.id.scrollView)
+
+        // Setup long click listener for multiple views
+        val longClickListener = View.OnLongClickListener { v ->
+            Log.d(TAG, "Long click detected on ${v.javaClass.simpleName}, isEditMode: $isEditMode")
             if (!isEditMode) {
                 toggleEditButtons(true)
                 Toast.makeText(context, "Edit mode enabled", Toast.LENGTH_SHORT).show()
@@ -60,18 +153,50 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
             }
         }
 
-        // Regular click to hide buttons when in edit mode
-        rootView.setOnClickListener {
+        // Setup click listener for multiple views
+        val clickListener = View.OnClickListener { v ->
+            Log.d(TAG, "Click detected on ${v.javaClass.simpleName}, isEditMode: $isEditMode")
             if (isEditMode) {
                 toggleEditButtons(false)
                 Toast.makeText(context, "Edit mode disabled", Toast.LENGTH_SHORT).show()
             }
         }
+
+        // Apply listeners to the root view first
+        rootView.setOnLongClickListener(longClickListener)
+        rootView.setOnClickListener(clickListener)
+        rootView.isLongClickable = true
+        rootView.isClickable = true
+
+        // Also add to scrollView if it exists
+        scrollView?.let { sv ->
+            sv.setOnLongClickListener(longClickListener)
+            sv.setOnClickListener(clickListener)
+            sv.isLongClickable = true
+            sv.isClickable = true
+        }
+
+        // Also add to widget container if initialized
+        if (::widgetContainer.isInitialized) {
+            widgetContainer.setOnLongClickListener(longClickListener)
+            widgetContainer.setOnClickListener(clickListener)
+            widgetContainer.isLongClickable = true
+            widgetContainer.isClickable = true
+        }
+
+        Log.d(TAG, "Touch listeners setup complete - rootView clickable: ${rootView.isClickable}, longClickable: ${rootView.isLongClickable}")
     }
 
     private fun initEditHeader() {
         val btnEdit = rootView.findViewById<View>(R.id.btnEdit)
         val btnDone = rootView.findViewById<View>(R.id.btnDone)
+
+        if (btnEdit == null || btnDone == null) {
+            Log.e(TAG, "Edit buttons not found in layout!")
+            return
+        }
+
+        Log.d(TAG, "Edit buttons found and initializing")
 
         btnEdit.setOnClickListener { anchor ->
             val popupMenu = PopupMenu(this, anchor)
@@ -81,6 +206,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
                 when(it.itemId) {
                     R.id.action_add_widget -> {
                         Log.d(TAG, "Add widget clicked")
+                        launchWidgetPicker()
                         true
                     }
                     R.id.action_customise -> {
@@ -134,8 +260,114 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
         window?.setBackgroundDrawable(ColorDrawable(color))
     }
 
+    private fun launchWidgetPicker() {
+        try {
+            Log.d(TAG, "Attempting to launch widget picker")
+
+            // For system apps in OverlayController, directly add common widgets
+            // Since we can't receive activity results in this context
+            showWidgetSelectionDialog()
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch widget picker", e)
+            Toast.makeText(context, "Unable to open widget picker", Toast.LENGTH_SHORT).show()
+
+            // Fallback: Try direct widget addition
+            tryDirectWidgetAddition()
+        }
+    }
+
+    private fun showWidgetSelectionDialog() {
+        try {
+            Log.d(TAG, "Showing widget picker view")
+
+            // Show the embedded widget picker view
+            widgetPickerView.show()
+
+            Log.d(TAG, "Widget picker view shown")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to show widget picker view", e)
+            Toast.makeText(context, "Failed to show widget picker: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun addWidgetDirectly(providerInfo: android.appwidget.AppWidgetProviderInfo) {
+        Log.d(TAG, "addWidgetDirectly called for: ${providerInfo.label}")
+        try {
+            val widgetId = widgetHostManager.allocateWidgetId()
+            Log.d(TAG, "Allocated widget ID: $widgetId")
+
+            val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(context)
+
+            Log.d(TAG, "Trying to bind widget: ${providerInfo.label} (${providerInfo.provider})")
+
+            // For system apps with BIND_APPWIDGET permission
+            val success = appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, providerInfo.provider)
+
+            if (success) {
+                Log.d(TAG, "Widget bound successfully, adding to container")
+                widgetHostManager.addWidgetToContainer(widgetId, providerInfo, widgetContainer)
+                saveWidgetInfo(widgetId, providerInfo)
+                Toast.makeText(context, "Added widget: ${providerInfo.label}", Toast.LENGTH_SHORT).show()
+                Log.d(TAG, "Widget added to container successfully")
+            } else {
+                Log.w(TAG, "Failed to bind widget - permission denied")
+                Toast.makeText(context, "Unable to add widget - permission required", Toast.LENGTH_SHORT).show()
+
+                // For Android 12+, we might need to request permission differently
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    Log.d(TAG, "Trying alternative binding for Android 12+")
+                    // Could implement permission request here
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add widget directly", e)
+            Toast.makeText(context, "Failed to add widget: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun tryDirectWidgetAddition() {
+        try {
+            // For system apps, we can try to directly add common widgets
+            // This is a fallback approach when the picker doesn't work
+
+            val widgetId = widgetHostManager.allocateWidgetId()
+
+            // Example: Try to add a clock widget directly
+            val clockProvider = ComponentName("com.android.deskclock", "com.android.alarmclock.DigitalAppWidgetProvider")
+            val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(context)
+
+            val success = appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, clockProvider)
+            if (success) {
+                val widgetInfo = appWidgetManager.getAppWidgetInfo(widgetId)
+                if (widgetInfo != null) {
+                    widgetHostManager.addWidgetToContainer(widgetId, widgetInfo, widgetContainer)
+                    saveWidgetInfo(widgetId, widgetInfo)
+                }
+            } else {
+                Log.w(TAG, "Direct widget binding not allowed")
+                // For system apps, we might need to request permission or use different approach
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add widget directly", e)
+        }
+    }
+
+    private fun saveWidgetInfo(widgetId: Int, widgetInfo: android.appwidget.AppWidgetProviderInfo) {
+        val info = WidgetDataStore.WidgetInfo(
+            widgetId = widgetId,
+            packageName = widgetInfo.provider.packageName,
+            className = widgetInfo.provider.className,
+            label = widgetInfo.loadLabel(context.packageManager),
+            position = widgetContainer.getWidgetCount()
+        )
+        widgetDataStore.saveWidget(info)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        widgetHostManager.onDestroy()
         FeedApp.bridge.setCallback(null)
         Log.d(TAG, "OverlayView destroyed")
     }
@@ -169,5 +401,88 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
 
     override fun onClientMessage(action: String) {
         Log.d(TAG, "onClientMessage: $action")
+    }
+
+    private fun setupWindowTouchInterception() {
+        try {
+            // Get the window and its decorView
+            window?.let { win ->
+                val decorView = win.decorView
+
+                // Set a touch listener on the decor view
+                decorView.setOnTouchListener { _, event ->
+                    Log.d(TAG, "Window touch event: action=${event.action}, x=${event.x}, y=${event.y}")
+
+                    // Try to handle with gesture detector
+                    if (gestureDetector.onTouchEvent(event)) {
+                        return@setOnTouchListener true
+                    }
+
+                    false
+                }
+
+                Log.d(TAG, "Window touch interception setup complete")
+            } ?: Log.w(TAG, "Window is null, cannot setup touch interception")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to setup window touch interception", e)
+        }
+    }
+
+    private fun initGestureDetector() {
+        gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                super.onLongPress(e)
+                Log.d(TAG, "GestureDetector: Long press detected at (${e.x}, ${e.y})")
+                if (!isEditMode) {
+                    toggleEditButtons(true)
+                    Toast.makeText(context, "Edit mode enabled", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                Log.d(TAG, "GestureDetector: Single tap detected at (${e.x}, ${e.y})")
+                if (isEditMode) {
+                    toggleEditButtons(false)
+                    Toast.makeText(context, "Edit mode disabled", Toast.LENGTH_SHORT).show()
+                    return true
+                }
+                return false
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        Log.d(TAG, "dispatchTouchEvent: action=${ev.action}, x=${ev.x}, y=${ev.y}")
+
+        // Check if the touch is on the buttons
+        if (isEditMode) {
+            val btnEdit = rootView.findViewById<View>(R.id.btnEdit)
+            val btnDone = rootView.findViewById<View>(R.id.btnDone)
+
+            if (isTouchOnView(ev, btnEdit) || isTouchOnView(ev, btnDone)) {
+                // Let the button handle it, don't process with gesture detector
+                return super.dispatchTouchEvent(ev)
+            }
+        }
+
+        // Let gesture detector handle the event
+        if (gestureDetector.onTouchEvent(ev)) {
+            return true
+        }
+
+        // If not handled by gesture detector, pass to parent
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun isTouchOnView(event: MotionEvent, view: View?): Boolean {
+        if (view == null || view.visibility != View.VISIBLE) return false
+
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val x = event.rawX.toInt()
+        val y = event.rawY.toInt()
+
+        return x >= location[0] && x <= location[0] + view.width &&
+               y >= location[1] && y <= location[1] + view.height
     }
 }
