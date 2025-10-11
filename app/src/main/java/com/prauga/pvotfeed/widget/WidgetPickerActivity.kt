@@ -25,15 +25,18 @@ class WidgetPickerActivity : AppCompatActivity() {
         const val REQUEST_PICK_APPWIDGET = 9
         const val REQUEST_CREATE_APPWIDGET = 10
         const val REQUEST_BIND_APPWIDGET = 11
+        const val REQUEST_LAUNCHER_PICK_WIDGET = 12  // For SystemUI-style picker
 
         // Result extras
         const val EXTRA_WIDGET_ID = "widget_id"
         const val EXTRA_WIDGET_INFO = "widget_info"
+        const val EXTRA_USE_SYSTEM_PICKER = "use_system_picker"
     }
 
     private lateinit var appWidgetManager: AppWidgetManager
     private lateinit var appWidgetHost: AppWidgetHost
     private var pendingWidgetId = -1
+    private lateinit var systemUIStylePicker: SystemUIStyleWidgetPicker
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,13 +45,41 @@ class WidgetPickerActivity : AppCompatActivity() {
         appWidgetManager = AppWidgetManager.getInstance(this)
         appWidgetHost = AppWidgetHost(this, WIDGET_HOST_ID)
         appWidgetHost.startListening()
+        systemUIStylePicker = SystemUIStyleWidgetPicker(this)
+
+        // Check if we should use the system picker preference
+        val useSystemPicker = intent.getBooleanExtra(EXTRA_USE_SYSTEM_PICKER, true)
 
         // Start the widget picker immediately
-        pickWidget()
+        pickWidget(useSystemPicker)
     }
 
-    private fun pickWidget() {
+    private fun pickWidget(trySystemUIStyle: Boolean = true) {
         Log.d(TAG, "=== PICK WIDGET START ===")
+        Log.d(TAG, "Trying SystemUI-style picker: $trySystemUIStyle")
+
+        // Try SystemUI-style picker first (like Pixel Launcher)
+        if (trySystemUIStyle && systemUIStylePicker.isWidgetPickerSupported()) {
+            val launcherPickerIntent = systemUIStylePicker.createWidgetPickerIntent(
+                excludedWidgets = emptyList(),  // TODO: Get existing widgets
+                title = "Add Widget to Feed",
+                description = "Choose a widget to display in your overlay"
+            )
+
+            if (launcherPickerIntent != null) {
+                try {
+                    Log.d(TAG, "Launching SystemUI-style widget picker")
+                    startActivityForResult(launcherPickerIntent, REQUEST_LAUNCHER_PICK_WIDGET)
+                    return
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to launch SystemUI-style picker", e)
+                    // Fall through to standard picker
+                }
+            }
+        }
+
+        // Fallback to standard Android widget picker
+        Log.d(TAG, "Using standard Android widget picker")
 
         // Allocate a new widget ID
         pendingWidgetId = appWidgetHost.allocateAppWidgetId()
@@ -62,7 +93,7 @@ class WidgetPickerActivity : AppCompatActivity() {
             Log.e(TAG, "Error starting widget host", e)
         }
 
-        // Create the picker intent
+        // Create the standard picker intent
         val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
 
@@ -90,6 +121,58 @@ class WidgetPickerActivity : AppCompatActivity() {
         Log.d(TAG, "onActivityResult: requestCode=$requestCode, resultCode=$resultCode")
 
         when (requestCode) {
+            REQUEST_LAUNCHER_PICK_WIDGET -> {
+                Log.d(TAG, "SystemUI-style picker result: resultCode=$resultCode")
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    val pickerResult = systemUIStylePicker.parsePickerResult(data)
+
+                    if (pickerResult?.isDragOperation == true) {
+                        Log.d(TAG, "Widget is being dragged, waiting for drop")
+                        // Nothing to do, the drag target will handle it
+                        finish()
+                        return
+                    }
+
+                    if (pickerResult?.componentName != null && pickerResult.user != null) {
+                        Log.d(TAG, "Widget selected via launcher: ${pickerResult.componentName}")
+
+                        // Allocate widget ID and bind
+                        pendingWidgetId = appWidgetHost.allocateAppWidgetId()
+
+                        // Try to bind the widget
+                        val canBind = appWidgetManager.bindAppWidgetIdIfAllowed(
+                            pendingWidgetId,
+                            pickerResult.user,
+                            pickerResult.componentName,
+                            null
+                        )
+
+                        if (canBind) {
+                            Log.d(TAG, "Successfully bound widget from launcher picker")
+                            val widgetInfo = appWidgetManager.getAppWidgetInfo(pendingWidgetId)
+                            if (widgetInfo != null) {
+                                handleSuccessfulBinding(pendingWidgetId, widgetInfo)
+                            }
+                        } else {
+                            Log.w(TAG, "Failed to bind widget from launcher picker")
+                            // Try the configuration flow
+                            val widgetInfo = appWidgetManager.installedProviders.find {
+                                it.provider == pickerResult.componentName
+                            }
+                            if (widgetInfo != null) {
+                                configureWidget(pendingWidgetId)
+                            }
+                        }
+                    } else {
+                        Log.w(TAG, "No widget selected from launcher picker")
+                        finish()
+                    }
+                } else {
+                    Log.d(TAG, "Launcher picker cancelled")
+                    finish()
+                }
+            }
+
             REQUEST_PICK_APPWIDGET -> {
                 if (resultCode == Activity.RESULT_OK && data != null) {
                     val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)

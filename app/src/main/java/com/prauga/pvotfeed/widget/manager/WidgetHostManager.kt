@@ -185,12 +185,23 @@ class WidgetHostManager(private val context: Context) {
             // Create the widget view
             val widgetView = appWidgetHost.createView(context, widgetId, widgetInfo)
 
-            // Set layout parameters
+            // Calculate proper widget dimensions
+            val widgetDimensions = calculateWidgetDimensions(widgetInfo, container)
+            Log.d(TAG, "Widget dimensions: ${widgetDimensions.width}x${widgetDimensions.height}")
+
+            // Set layout parameters with calculated dimensions
             val layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
+                widgetDimensions.width,
+                widgetDimensions.height
+            ).apply {
+                // Add some margin for better spacing
+                setMargins(16, 16, 16, 16)
+            }
             widgetView.layoutParams = layoutParams
+
+            // Set minimum width and height
+            widgetView.minimumWidth = widgetDimensions.minWidth
+            widgetView.minimumHeight = widgetDimensions.minHeight
 
             // Enable auto-advance for widgets that support it (like photo frames)
             widgetView.setAppWidget(widgetId, widgetInfo)
@@ -201,6 +212,11 @@ class WidgetHostManager(private val context: Context) {
             // Add to container
             container.addView(widgetView)
 
+            // Update widget size after layout
+            widgetView.post {
+                updateWidgetSize(widgetView, widgetId, widgetInfo)
+            }
+
             // Trigger initial update
             widgetView.updateAppWidget(null)
 
@@ -208,13 +224,96 @@ class WidgetHostManager(private val context: Context) {
             ensureHostListening()
 
             Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
-            Log.d(TAG, "Widget added successfully with ID: $widgetId, updates enabled")
+            Log.d(TAG, "Widget added successfully with ID: $widgetId, size: ${widgetDimensions.width}x${widgetDimensions.height}")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add widget to container", e)
             Toast.makeText(context, "Error adding widget: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
+
+    /**
+     * Calculate appropriate dimensions for a widget based on its requirements
+     */
+    private fun calculateWidgetDimensions(
+        widgetInfo: AppWidgetProviderInfo,
+        container: ViewGroup
+    ): WidgetDimensions {
+        // Get display metrics
+        val displayMetrics = context.resources.displayMetrics
+
+        // Get widget's minimum dimensions (in dp, need to convert to px)
+        val minWidthDp = widgetInfo.minWidth
+        val minHeightDp = widgetInfo.minHeight
+
+        // Convert dp to pixels
+        val minWidthPx = (minWidthDp * displayMetrics.density).toInt()
+        val minHeightPx = (minHeightDp * displayMetrics.density).toInt()
+
+        // Get container dimensions
+        val containerWidth = if (container.width > 0) container.width else displayMetrics.widthPixels
+        val containerHeight = displayMetrics.heightPixels / 3 // Use 1/3 of screen height as max
+
+        // Calculate actual dimensions
+        // Use the larger of minimum size and a reasonable default
+        val width = when {
+            minWidthPx > 0 -> minOf(minWidthPx, containerWidth - 32) // Leave some margin
+            else -> containerWidth - 32
+        }
+
+        val height = when {
+            minHeightPx > 0 -> minOf(minHeightPx, containerHeight)
+            else -> (200 * displayMetrics.density).toInt() // Default 200dp
+        }
+
+        Log.d(TAG, "Widget size calculation: minW=${minWidthDp}dp, minH=${minHeightDp}dp -> ${width}px x ${height}px")
+
+        return WidgetDimensions(
+            width = width,
+            height = height,
+            minWidth = minWidthPx,
+            minHeight = minHeightPx
+        )
+    }
+
+    /**
+     * Update the size constraints for a widget
+     */
+    private fun updateWidgetSize(
+        widgetView: AppWidgetHostView,
+        widgetId: Int,
+        widgetInfo: AppWidgetProviderInfo
+    ) {
+        val width = widgetView.width
+        val height = widgetView.height
+
+        if (width > 0 && height > 0) {
+            // Calculate size in dp
+            val displayMetrics = context.resources.displayMetrics
+            val widthDp = (width / displayMetrics.density).toInt()
+            val heightDp = (height / displayMetrics.density).toInt()
+
+            Log.d(TAG, "Updating widget size for ID $widgetId: ${width}px x ${height}px (${widthDp}dp x ${heightDp}dp)")
+
+            try {
+                // Update the app widget size with min/max bounds
+                widgetView.updateAppWidgetSize(
+                    null,
+                    widthDp, heightDp,  // min width, min height
+                    widthDp, heightDp   // max width, max height
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update widget size", e)
+            }
+        }
+    }
+
+    private data class WidgetDimensions(
+        val width: Int,
+        val height: Int,
+        val minWidth: Int,
+        val minHeight: Int
+    )
 
     /**
      * Ensure the widget host is listening for updates

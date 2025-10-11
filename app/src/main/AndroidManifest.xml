@@ -4,8 +4,10 @@
     package="com.prauga.pvotfeed">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Widget hosting permissions for system apps -->
     <uses-permission android:name="android.permission.BIND_APPWIDGET" />
+    <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
+
+    <uses-permission android:name="com.android.launcher3.permission.START_WIDGET_PICKER_ACTIVITY" />
     <uses-permission android:name="android.permission.START_WIDGET_PICKER_ACTIVITY" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
     <uses-permission android:name="com.android.launcher.permission.UNINSTALL_SHORTCUT" />
@@ -52,6 +54,7 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity=""
+            android:permission="com.android.launcher3.permission.START_WIDGET_PICKER_ACTIVITY"
             android:configChanges="orientation|keyboardHidden|screenSize" />
     </application>
 
