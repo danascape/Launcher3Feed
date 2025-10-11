@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">PvotFeed</string>
+    <string name="edit_widgets">Edit</string>
+    <string name="save_widgets">Done</string>
+    <string name="popup_add_widget">Add Widget</string>
+    <string name="popup_customise">Customise</string>
 </resources>
