@@ -4,8 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:padding="16dp"
-    android:background="#F0FFFFFF">
+    android:padding="16dp">
 
     <TextView
         android:id="@+id/tvHello"
