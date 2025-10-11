@@ -1,9 +1,12 @@
 package com.prauga.pvotfeed.service
 
 import android.app.Activity
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -15,6 +18,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.PopupMenu
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import com.google.android.libraries.gsa.d.a.OverlayController
 import com.prauga.pvotfeed.FeedApp
 import com.prauga.pvotfeed.R
@@ -23,9 +27,12 @@ import com.prauga.pvotfeed.widget.helper.WidgetPickerHelper
 import com.prauga.pvotfeed.widget.manager.WidgetHostManager
 import com.prauga.pvotfeed.widget.view.WidgetContainerView
 import com.prauga.pvotfeed.widget.view.WidgetPickerView
+import com.prauga.pvotfeed.widget.WidgetResultReceiver
+import com.prauga.pvotfeed.widget.WidgetPickerActivity
 
 class OverlayView(private val context: Context) : OverlayController(context, R.style.AppTheme, R.style.WindowTheme),
-    OverlayBridge.OverlayBridgeCallback {
+    OverlayBridge.OverlayBridgeCallback,
+    WidgetResultReceiver.WidgetResultListener {
 
     private lateinit var rootView: View
     private lateinit var btnEdit: Button
@@ -37,6 +44,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     private lateinit var widgetHostManager: WidgetHostManager
     private lateinit var widgetPickerHelper: WidgetPickerHelper
     private lateinit var widgetDataStore: WidgetDataStore
+    private lateinit var widgetResultReceiver: WidgetResultReceiver
 
     private var isEditMode: Boolean = false
     private lateinit var gestureDetector: GestureDetector
@@ -85,10 +93,42 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     }
 
     private fun initializeWidgetSystem() {
-        // Initialize widget managers
-        widgetHostManager = WidgetHostManager(context)
-        widgetPickerHelper = WidgetPickerHelper(context)
-        widgetDataStore = WidgetDataStore(context)
+        try {
+            Log.d(TAG, "Initializing widget system...")
+
+            // Initialize widget managers
+            widgetHostManager = WidgetHostManager(context)
+            widgetPickerHelper = WidgetPickerHelper(context)
+            widgetDataStore = WidgetDataStore(context)
+            Log.d(TAG, "Widget managers initialized")
+
+            // Set up broadcast receiver for widget picker results
+            try {
+                widgetResultReceiver = WidgetResultReceiver()
+                WidgetResultReceiver.setListener(this)
+
+                // Register the broadcast receiver
+                val intentFilter = IntentFilter().apply {
+                    addAction(WidgetResultReceiver.ACTION_WIDGET_SELECTED)
+                    addAction(WidgetResultReceiver.ACTION_WIDGET_CANCELLED)
+                }
+                ContextCompat.registerReceiver(
+                    context,
+                    widgetResultReceiver,
+                    intentFilter,
+                    ContextCompat.RECEIVER_EXPORTED
+                )
+                Log.d(TAG, "Broadcast receiver registered")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set up broadcast receiver", e)
+                // Continue without broadcast receiver - fallback to custom picker
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing widget managers", e)
+            // Initialize at least the basic managers to prevent NPE
+            widgetHostManager = WidgetHostManager(context)
+            widgetDataStore = WidgetDataStore(context)
+        }
 
         // Find or create widget container
         widgetContainer = rootView.findViewById(R.id.widget_container)
@@ -99,32 +139,42 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
             }
 
         // Initialize widget picker view
-        widgetPickerView = rootView.findViewById(R.id.widgetPickerView)
-        if (widgetPickerView == null) {
-            Log.e(TAG, "Widget picker view not found in layout, creating programmatically")
-            widgetPickerView = WidgetPickerView(context).also { picker ->
-                // If not in layout, add it programmatically
-                val parentView = rootView as? android.view.ViewGroup
-                parentView?.addView(picker)
+        try {
+            widgetPickerView = rootView.findViewById(R.id.widgetPickerView)
+            if (widgetPickerView == null) {
+                Log.e(TAG, "Widget picker view not found in layout, creating programmatically")
+                widgetPickerView = WidgetPickerView(context).also { picker ->
+                    // If not in layout, add it programmatically
+                    val parentView = rootView as? android.view.ViewGroup
+                    parentView?.addView(picker)
+                }
+            } else {
+                Log.d(TAG, "Widget picker view found in layout")
             }
-        } else {
-            Log.d(TAG, "Widget picker view found in layout")
-        }
 
-        // Set up widget picker listeners
-        widgetPickerView.setOnWidgetSelectedListener { widgetInfo ->
-            Log.d(TAG, "Widget selected from picker: ${widgetInfo.label}")
-            Log.d(TAG, "Provider: ${widgetInfo.provider}")
-            addWidgetDirectly(widgetInfo)
-        }
-        Log.d(TAG, "Widget selection listener set on picker view")
+            // Set up widget picker listeners
+            widgetPickerView.setOnWidgetSelectedListener { widgetInfo ->
+                Log.d(TAG, "Widget selected from picker: ${widgetInfo.label}")
+                Log.d(TAG, "Provider: ${widgetInfo.provider}")
+                addWidgetDirectly(widgetInfo)
+            }
+            Log.d(TAG, "Widget selection listener set on picker view")
 
-        widgetPickerView.setOnCloseListener {
-            widgetPickerView.hide()
+            widgetPickerView.setOnCloseListener {
+                widgetPickerView.hide()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize widget picker view", e)
+            // Create a minimal picker view to prevent NPE
+            widgetPickerView = WidgetPickerView(context)
         }
 
         // Restore previously saved widgets
-        restoreSavedWidgets()
+        try {
+            restoreSavedWidgets()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restore saved widgets", e)
+        }
 
         Log.d(TAG, "Widget system initialized")
     }
@@ -262,18 +312,43 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
 
     private fun launchWidgetPicker() {
         try {
-            Log.d(TAG, "Attempting to launch widget picker")
+            Log.d(TAG, "Attempting to launch native widget picker")
 
-            // For system apps in OverlayController, directly add common widgets
-            // Since we can't receive activity results in this context
-            showWidgetSelectionDialog()
+            // First try to use the native widget picker through our bridge activity
+            val useNativePicker = true // Set to false to use custom picker
+
+            if (useNativePicker) {
+                launchNativeWidgetPicker()
+            } else {
+                // Fall back to custom picker if native picker doesn't work
+                showWidgetSelectionDialog()
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch widget picker", e)
-            Toast.makeText(context, "Unable to open widget picker", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Unable to open widget picker: ${e.message}", Toast.LENGTH_SHORT).show()
+            // Fall back to custom picker
+            showWidgetSelectionDialog()
+        }
+    }
 
-            // Fallback: Try direct widget addition
-            tryDirectWidgetAddition()
+    private fun launchNativeWidgetPicker() {
+        try {
+            Log.d(TAG, "Launching native widget picker via WidgetPickerActivity")
+
+            // Launch our bridge activity that will handle the native picker
+            val intent = Intent(context, WidgetPickerActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+
+            context.startActivity(intent)
+
+            // The result will be received via broadcast receiver
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch native widget picker", e)
+            Toast.makeText(context, "Falling back to custom picker", Toast.LENGTH_SHORT).show()
+            showWidgetSelectionDialog()
         }
     }
 
@@ -365,11 +440,56 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
         widgetDataStore.saveWidget(info)
     }
 
+
     override fun onDestroy() {
         super.onDestroy()
-        widgetHostManager.onDestroy()
+
+        // Clean up widget manager if initialized
+        if (::widgetHostManager.isInitialized) {
+            try {
+                widgetHostManager.onDestroy()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error destroying widget host manager", e)
+            }
+        }
+
         FeedApp.bridge.setCallback(null)
+
+        // Unregister broadcast receiver if initialized
+        if (::widgetResultReceiver.isInitialized) {
+            try {
+                context.unregisterReceiver(widgetResultReceiver)
+                WidgetResultReceiver.setListener(null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error unregistering receiver", e)
+            }
+        }
+
         Log.d(TAG, "OverlayView destroyed")
+    }
+
+    // WidgetResultListener implementation
+    override fun onWidgetSelected(widgetId: Int, widgetInfo: AppWidgetProviderInfo?) {
+        Log.d(TAG, "Widget selected via broadcast: ID=$widgetId")
+
+        if (widgetInfo != null) {
+            try {
+                widgetHostManager.addWidgetToContainer(widgetId, widgetInfo, widgetContainer)
+                saveWidgetInfo(widgetId, widgetInfo)
+                Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add widget from broadcast", e)
+                Toast.makeText(context, "Failed to add widget: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Log.e(TAG, "Widget info is null for ID: $widgetId")
+            Toast.makeText(context, "Failed to get widget information", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onWidgetSelectionCancelled() {
+        Log.d(TAG, "Widget selection cancelled via broadcast")
+        Toast.makeText(context, "Widget selection cancelled", Toast.LENGTH_SHORT).show()
     }
 
     // OverlayBridge callback methods

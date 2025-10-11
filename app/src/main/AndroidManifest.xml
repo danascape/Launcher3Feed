@@ -45,6 +45,14 @@
                 android:name="service.api.version"
                 android:value="7" />
         </service>
+
+        <activity
+            android:name=".widget.WidgetPickerActivity"
+            android:theme="@style/Theme.AppCompat.Translucent"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:configChanges="orientation|keyboardHidden|screenSize" />
     </application>
 
 </manifest>

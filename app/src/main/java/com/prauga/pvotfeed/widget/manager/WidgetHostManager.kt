@@ -22,20 +22,52 @@ class WidgetHostManager(private val context: Context) {
 
     companion object {
         private const val TAG = "WidgetHostManager"
-        private const val WIDGET_HOST_ID = 1024
+        const val WIDGET_HOST_ID = 1024  // Made public for consistency across the app
         const val REQUEST_PICK_WIDGET = 100
         const val REQUEST_CREATE_WIDGET = 101
+        const val REQUEST_PICK_APPWIDGET = 9  // Native picker request code
+        const val REQUEST_CREATE_APPWIDGET = 10
+        const val REQUEST_BIND_APPWIDGET = 11
     }
 
     private val appWidgetManager: AppWidgetManager = AppWidgetManager.getInstance(context)
-    private val appWidgetHost: AppWidgetHost = AppWidgetHost(context, WIDGET_HOST_ID)
+
+    // Custom AppWidgetHost that handles updates
+    private val appWidgetHost: AppWidgetHost = object : AppWidgetHost(context, WIDGET_HOST_ID) {
+        override fun onCreateView(
+            context: Context,
+            appWidgetId: Int,
+            appWidget: AppWidgetProviderInfo?
+        ): AppWidgetHostView {
+            Log.d(TAG, "Creating widget view for ID: $appWidgetId")
+            return super.onCreateView(context, appWidgetId, appWidget)
+        }
+
+        override fun onProviderChanged(appWidgetId: Int, appWidget: AppWidgetProviderInfo?) {
+            super.onProviderChanged(appWidgetId, appWidget)
+            Log.d(TAG, "Widget provider changed for ID: $appWidgetId")
+
+            // Update the widget view if it exists
+            activeWidgets[appWidgetId]?.let { view ->
+                if (appWidget != null) {
+                    view.setAppWidget(appWidgetId, appWidget)
+                    view.updateAppWidget(null)
+                }
+            }
+        }
+    }
 
     // Map to store widget IDs and their views
     private val activeWidgets = mutableMapOf<Int, AppWidgetHostView>()
 
     init {
         // Start listening for widget updates
-        appWidgetHost.startListening()
+        try {
+            appWidgetHost.startListening()
+            Log.d(TAG, "AppWidgetHost started listening for updates")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start listening for widget updates", e)
+        }
     }
 
     /**
@@ -43,6 +75,19 @@ class WidgetHostManager(private val context: Context) {
      */
     fun allocateWidgetId(): Int {
         return appWidgetHost.allocateAppWidgetId()
+    }
+
+    /**
+     * Delete a widget ID (for cleanup when cancelled)
+     */
+    fun deleteWidgetId(widgetId: Int) {
+        try {
+            appWidgetHost.deleteAppWidgetId(widgetId)
+            activeWidgets.remove(widgetId)
+            Log.d(TAG, "Deleted widget ID: $widgetId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to delete widget ID: $widgetId", e)
+        }
     }
 
     /**
@@ -136,24 +181,51 @@ class WidgetHostManager(private val context: Context) {
     ) {
         Log.d(TAG, "Adding widget: ${widgetInfo.label}")
 
-        // Create the widget view
-        val widgetView = appWidgetHost.createView(context, widgetId, widgetInfo)
+        try {
+            // Create the widget view
+            val widgetView = appWidgetHost.createView(context, widgetId, widgetInfo)
 
-        // Set layout parameters
-        val layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        )
-        widgetView.layoutParams = layoutParams
+            // Set layout parameters
+            val layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            widgetView.layoutParams = layoutParams
 
-        // Store the widget
-        activeWidgets[widgetId] = widgetView
+            // Enable auto-advance for widgets that support it (like photo frames)
+            widgetView.setAppWidget(widgetId, widgetInfo)
 
-        // Add to container
-        container.addView(widgetView)
+            // Store the widget
+            activeWidgets[widgetId] = widgetView
 
-        Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
-        Log.d(TAG, "Widget added successfully with ID: $widgetId")
+            // Add to container
+            container.addView(widgetView)
+
+            // Trigger initial update
+            widgetView.updateAppWidget(null)
+
+            // Ensure the widget host is still listening
+            ensureHostListening()
+
+            Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
+            Log.d(TAG, "Widget added successfully with ID: $widgetId, updates enabled")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add widget to container", e)
+            Toast.makeText(context, "Error adding widget: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Ensure the widget host is listening for updates
+     */
+    private fun ensureHostListening() {
+        try {
+            // This will restart listening if it was stopped
+            appWidgetHost.startListening()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error ensuring host listening", e)
+        }
     }
 
     /**
@@ -197,11 +269,56 @@ class WidgetHostManager(private val context: Context) {
     }
 
     /**
+     * Force update all widgets (useful for refresh)
+     */
+    fun updateAllWidgets() {
+        Log.d(TAG, "Forcing update on all ${activeWidgets.size} widgets")
+        for ((widgetId, widgetView) in activeWidgets) {
+            try {
+                widgetView.updateAppWidget(null)
+                Log.d(TAG, "Updated widget ID: $widgetId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update widget ID: $widgetId", e)
+            }
+        }
+    }
+
+    /**
+     * Resume listening for updates (call in onResume)
+     */
+    fun onResume() {
+        try {
+            appWidgetHost.startListening()
+            updateAllWidgets()
+            Log.d(TAG, "Resumed listening for widget updates")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error resuming widget updates", e)
+        }
+    }
+
+    /**
+     * Pause listening for updates (call in onPause)
+     */
+    fun onPause() {
+        try {
+            // Don't stop listening in onPause to keep widgets updating
+            // Only stop in onDestroy
+            Log.d(TAG, "onPause called but keeping widget updates active")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onPause", e)
+        }
+    }
+
+    /**
      * Clean up resources
      */
     fun onDestroy() {
-        appWidgetHost.stopListening()
-        activeWidgets.clear()
-        Log.d(TAG, "WidgetHostManager destroyed")
+        try {
+            appWidgetHost.stopListening()
+            activeWidgets.clear()
+            Log.d(TAG, "WidgetHostManager destroyed, stopped listening")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying widget host", e)
+        }
     }
 }
