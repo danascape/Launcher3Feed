@@ -208,11 +208,10 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     private fun addDefaultWidgets() {
         // List of default widgets to add
         val defaultWidgets = listOf(
-            // Cromite search widget
             ComponentName(
-                "org.cromite.cromite",
-                "org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider\$QuickActionSearchWidgetProviderSearch"
-            )
+                "com.prauga.pvotwidgets",
+                "com.prauga.pvotwidgets.PvotWidgetProvider"
+            ),
         )
 
         defaultWidgets.forEach { componentName ->
