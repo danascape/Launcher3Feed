@@ -15,6 +15,7 @@ import com.prauga.pvotfeed.widget.manager.WidgetHostManager
 class OverlayService(): Service() {
     private lateinit var overlaysController: OverlaysController
     private var timeTickReceiver: BroadcastReceiver? = null
+    private var screenStateReceiver: BroadcastReceiver? = null
 
     companion object {
         private const val TAG = "OverlayService"
@@ -45,6 +46,9 @@ class OverlayService(): Service() {
         // Register broadcast receiver for time/date changes that widgets need
         registerTimeTickReceiver()
 
+        // Register broadcast receiver for screen on/off events
+        registerScreenStateReceiver()
+
         overlaysController = ConfigurationOverlayController(this)
     }
 
@@ -57,9 +61,9 @@ class OverlayService(): Service() {
                         Intent.ACTION_TIME_CHANGED,
                         Intent.ACTION_TIMEZONE_CHANGED,
                         Intent.ACTION_DATE_CHANGED -> {
-                            Log.d(TAG, "Time/date changed, notifying widgets: ${intent.action}")
-                            // Force widget host to update all widgets
-                            widgetHostManager?.updateAllWidgets()
+                            Log.d(TAG, "Time/date changed: ${intent.action}")
+                            // Just ensure host is listening - widgets will auto-update themselves
+                            widgetHostManager?.ensureListening()
                         }
                     }
                 }
@@ -84,6 +88,49 @@ class OverlayService(): Service() {
         }
     }
 
+    private fun registerScreenStateReceiver() {
+        try {
+            screenStateReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    when (intent?.action) {
+                        Intent.ACTION_SCREEN_ON -> {
+                            Log.d(TAG, "Screen turned ON, ensuring widget host is listening")
+                            // Just ensure host is listening - don't force updates
+                            widgetHostManager?.let {
+                                try {
+                                    it.ensureListening()
+                                    Log.d(TAG, "Widget host ensured listening after screen ON")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to ensure widget host listening on screen ON", e)
+                                }
+                            }
+                        }
+                        Intent.ACTION_SCREEN_OFF -> {
+                            Log.d(TAG, "Screen turned OFF")
+                            // Don't stop listening - widgets should stay active
+                            // The host will handle screen off automatically
+                        }
+                    }
+                }
+            }
+
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            }
+
+            ContextCompat.registerReceiver(
+                this,
+                screenStateReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            Log.d(TAG, "Screen state receiver registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register screen state receiver", e)
+        }
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "Service onDestroy")
         overlaysController.onDestroy()
@@ -98,6 +145,17 @@ class OverlayService(): Service() {
             }
         }
         timeTickReceiver = null
+
+        // Unregister screen state receiver
+        screenStateReceiver?.let {
+            try {
+                unregisterReceiver(it)
+                Log.d(TAG, "Screen state receiver unregistered")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to unregister screen state receiver", e)
+            }
+        }
+        screenStateReceiver = null
 
         // Clean up widget manager when service is destroyed
         widgetHostManager?.onDestroy()

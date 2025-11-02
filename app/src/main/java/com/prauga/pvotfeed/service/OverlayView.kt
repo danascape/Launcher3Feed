@@ -643,7 +643,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
 
                 // Set a touch listener on the decor view
                 decorView.setOnTouchListener { _, event ->
-                    Log.d(TAG, "Window touch event: action=${event.action}, x=${event.x}, y=${event.y}")
+                    //Log.d(TAG, "Window touch event: action=${event.action}, x=${event.x}, y=${event.y}")
 
                     // Try to handle with gesture detector
                     if (gestureDetector.onTouchEvent(event)) {

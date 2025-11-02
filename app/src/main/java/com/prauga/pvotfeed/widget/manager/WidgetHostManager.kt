@@ -442,13 +442,23 @@ class WidgetHostManager(private val context: Context) {
     /**
      * Ensure the widget host is listening for updates
      */
-    private fun ensureHostListening() {
+    /**
+     * Ensure the AppWidgetHost is listening for updates (public)
+     */
+    fun ensureListening() {
         try {
-            // This will restart listening if it was stopped
             appWidgetHost.startListening()
+            Log.d(TAG, "AppWidgetHost is now listening for updates")
         } catch (e: Exception) {
             Log.e(TAG, "Error ensuring host listening", e)
         }
+    }
+
+    /**
+     * Private version for internal use
+     */
+    private fun ensureHostListening() {
+        ensureListening()
     }
 
     /**
@@ -505,12 +515,25 @@ class WidgetHostManager(private val context: Context) {
      */
     fun updateAllWidgets() {
         Log.d(TAG, "Forcing update on all ${activeWidgets.size} widgets")
+
+        // First, notify the AppWidgetManager to send fresh RemoteViews to the host
+        try {
+            val widgetIds = activeWidgets.keys.toIntArray()
+            if (widgetIds.isNotEmpty()) {
+                appWidgetManager.notifyAppWidgetViewDataChanged(widgetIds, 0)
+                Log.d(TAG, "Notified AppWidgetManager to refresh ${widgetIds.size} widgets")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to notify AppWidgetManager", e)
+        }
+
+        // Then request each view to update with latest RemoteViews
         for ((widgetId, widgetView) in activeWidgets) {
             try {
                 widgetView.updateAppWidget(null)
-                Log.d(TAG, "Updated widget ID: $widgetId")
+                Log.d(TAG, "Updated widget view ID: $widgetId")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to update widget ID: $widgetId", e)
+                Log.e(TAG, "Failed to update widget view ID: $widgetId", e)
             }
         }
     }
@@ -521,8 +544,8 @@ class WidgetHostManager(private val context: Context) {
     fun onResume() {
         try {
             appWidgetHost.startListening()
-            updateAllWidgets()
-            Log.d(TAG, "Resumed listening for widget updates")
+            // Don't call updateAllWidgets() - let widgets update naturally
+            Log.d(TAG, "Resumed listening for widget updates (widgets will auto-update)")
         } catch (e: Exception) {
             Log.e(TAG, "Error resuming widget updates", e)
         }
