@@ -26,15 +26,4 @@ android_app {
     optimize: {
         enabled: false,
     },
-    required: [
-        "privapp_whitelist_com.prauga.pvotfeed.xml"
-    ],
-}
-
-prebuilt_etc_xml {
-    name: "privapp_whitelist_com.prauga.pvotfeed.xml",
-    src: "privapp_whitelist_com.prauga.pvotfeed.xml",
-    system_ext_specific: true,
-    filename_from_src: true,
-    sub_dir: "permissions",
 }
