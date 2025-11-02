@@ -38,21 +38,25 @@
 
     </LinearLayout>
 
-    <!-- Widget container -->
+    <!-- Widget container with scrolling -->
     <ScrollView
         android:id="@+id/scrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="80dp"
         android:clickable="false"
-        android:focusable="false">
+        android:focusable="false"
+        android:fillViewport="false"
+        android:scrollbars="vertical">
 
         <com.prauga.pvotfeed.widget.view.WidgetContainerView
             android:id="@+id/widget_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="8dp" />
+            android:padding="8dp"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
 
     </ScrollView>
 

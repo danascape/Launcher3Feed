@@ -190,18 +190,23 @@ class WidgetHostManager(private val context: Context) {
             Log.d(TAG, "Widget dimensions: ${widgetDimensions.width}x${widgetDimensions.height}")
 
             // Set layout parameters with calculated dimensions
-            val layoutParams = FrameLayout.LayoutParams(
-                widgetDimensions.width,
+            // Use MATCH_PARENT for width and calculated height to ensure proper scrolling
+            val layoutParams = ViewGroup.MarginLayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 widgetDimensions.height
             ).apply {
-                // Add some margin for better spacing
-                setMargins(16, 16, 16, 16)
+                // Add margin for better spacing
+                val margin = (16 * context.resources.displayMetrics.density).toInt()
+                setMargins(margin, margin, margin, margin)
             }
             widgetView.layoutParams = layoutParams
 
             // Set minimum width and height
             widgetView.minimumWidth = widgetDimensions.minWidth
             widgetView.minimumHeight = widgetDimensions.minHeight
+
+            // Tag the widget view with its ID for easy lookup
+            widgetView.tag = widgetId
 
             // Enable auto-advance for widgets that support it (like photo frames)
             widgetView.setAppWidget(widgetId, widgetInfo)
@@ -252,18 +257,19 @@ class WidgetHostManager(private val context: Context) {
 
         // Get container dimensions
         val containerWidth = if (container.width > 0) container.width else displayMetrics.widthPixels
-        val containerHeight = displayMetrics.heightPixels / 3 // Use 1/3 of screen height as max
+
+        // Cap widget height to a reasonable maximum to allow multiple widgets
+        // Use the widget's minimum height, but cap it to avoid taking full screen
+        val maxWidgetHeight = displayMetrics.heightPixels / 2 // Max 50% of screen height per widget
 
         // Calculate actual dimensions
-        // Use the larger of minimum size and a reasonable default
-        val width = when {
-            minWidthPx > 0 -> minOf(minWidthPx, containerWidth - 32) // Leave some margin
-            else -> containerWidth - 32
-        }
+        // Width always matches parent (will be set in layout params)
+        val width = containerWidth - (32 * displayMetrics.density).toInt() // Leave some margin
 
+        // Height uses the widget's minimum, but capped at reasonable maximum
         val height = when {
-            minHeightPx > 0 -> minOf(minHeightPx, containerHeight)
-            else -> (200 * displayMetrics.density).toInt() // Default 200dp
+            minHeightPx > 0 -> minOf(minHeightPx, maxWidgetHeight)
+            else -> (200 * displayMetrics.density).toInt() // Default 200dp if no minimum specified
         }
 
         Log.d(TAG, "Widget size calculation: minW=${minWidthDp}dp, minH=${minHeightDp}dp -> ${width}px x ${height}px")

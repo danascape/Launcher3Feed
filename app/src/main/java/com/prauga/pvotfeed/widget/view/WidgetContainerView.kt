@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.core.view.children
 
@@ -32,16 +33,20 @@ class WidgetContainerView @JvmOverloads constructor(
 
     /**
      * Add a widget view to the container
+     * Note: Widget views should already have proper layout params set by WidgetHostManager
      */
     fun addWidgetView(widgetView: View, position: Int = -1) {
-        val params = LayoutParams(
-            LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT
-        ).apply {
-            val margin = (8 * context.resources.displayMetrics.density).toInt()
-            setMargins(margin, margin, margin, margin)
+        // Only set layout params if the view doesn't already have proper ones
+        if (widgetView.layoutParams == null || widgetView.layoutParams !is ViewGroup.MarginLayoutParams) {
+            val params = LayoutParams(
+                LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT
+            ).apply {
+                val margin = (8 * context.resources.displayMetrics.density).toInt()
+                setMargins(margin, margin, margin, margin)
+            }
+            widgetView.layoutParams = params
         }
-        widgetView.layoutParams = params
 
         if (position >= 0 && position < childCount) {
             addView(widgetView, position)
@@ -49,7 +54,7 @@ class WidgetContainerView @JvmOverloads constructor(
             addView(widgetView)
         }
 
-        Log.d(TAG, "Widget view added at position: ${if (position >= 0) position else childCount - 1}")
+        Log.d(TAG, "Widget view added at position: ${if (position >= 0) position else childCount - 1}, total widgets: $childCount")
     }
 
     /**
