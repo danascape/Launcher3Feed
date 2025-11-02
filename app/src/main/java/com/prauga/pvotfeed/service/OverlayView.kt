@@ -218,7 +218,12 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
                 if (widgetInfo != null) {
                     // Widget is still valid, add it to the container
                     Log.d(TAG, "Restoring widget: ${widgetInfo.label}")
-                    widgetHostManager.addWidgetToContainer(savedWidget.widgetId, widgetInfo, widgetContainer, showToast = false)
+                    try {
+                        widgetHostManager.addWidgetToContainer(savedWidget.widgetId, widgetInfo, widgetContainer, showToast = false)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to add widget during restoration: ${widgetInfo.label}", e)
+                        // Don't remove from saved data - might work next time
+                    }
                 } else {
                     // Widget ID is no longer valid, remove it from saved data
                     Log.w(TAG, "Widget ID ${savedWidget.widgetId} is no longer valid, removing from saved data")
@@ -226,8 +231,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to restore widget: ${savedWidget.label}", e)
-                // Optionally remove the widget from saved data if restoration fails
-                widgetDataStore.removeWidget(savedWidget.widgetId)
+                // Don't automatically remove - the widget might work later
             }
         }
 
@@ -594,7 +598,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
             }
 
             override fun onSingleTapUp(e: MotionEvent): Boolean {
-                Log.d(TAG, "GestureDetector: Single tap detected at (${e.x}, ${e.y})")
+                //Log.d(TAG, "GestureDetector: Single tap detected at (${e.x}, ${e.y})")
                 if (isEditMode) {
                     toggleEditButtons(false)
                     Toast.makeText(context, "Edit mode disabled", Toast.LENGTH_SHORT).show()

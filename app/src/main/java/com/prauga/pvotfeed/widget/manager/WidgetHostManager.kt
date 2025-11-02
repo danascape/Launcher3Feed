@@ -28,6 +28,16 @@ class WidgetHostManager(private val context: Context) {
         const val REQUEST_PICK_APPWIDGET = 9  // Native picker request code
         const val REQUEST_CREATE_APPWIDGET = 10
         const val REQUEST_BIND_APPWIDGET = 11
+
+        // Shared thread pool executor for widget RemoteViews inflation (like Trebuchet)
+        private val WIDGET_EXECUTOR = java.util.concurrent.Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors(),
+            java.util.concurrent.ThreadFactory { r ->
+                Thread(r, "widget-inflation").apply {
+                    priority = Thread.NORM_PRIORITY
+                }
+            }
+        )
     }
 
     private val appWidgetManager: AppWidgetManager = AppWidgetManager.getInstance(context)
@@ -39,8 +49,75 @@ class WidgetHostManager(private val context: Context) {
             appWidgetId: Int,
             appWidget: AppWidgetProviderInfo?
         ): AppWidgetHostView {
-            Log.d(TAG, "Creating widget view for ID: $appWidgetId")
-            return super.onCreateView(context, appWidgetId, appWidget)
+            Log.d(TAG, "Creating widget view for ID: $appWidgetId, provider: ${appWidget?.provider}")
+
+            // Create AppWidgetHostView with proper executor configuration (like Trebuchet launcher)
+            return object : AppWidgetHostView(context) {
+                init {
+                    // KEY FIX: Set shared executor for background thread inflation
+                    // This allows RemoteViews to properly access widget provider's package resources
+                    // This is the same approach used by Trebuchet launcher
+                    setExecutor(WIDGET_EXECUTOR)
+
+                    // Enable clipping to outline for proper rendering
+                    clipToOutline = true
+
+                    Log.d(TAG, "AppWidgetHostView created for ID $appWidgetId with shared thread pool executor")
+                }
+
+                override fun getAppWidgetInfo(): AppWidgetProviderInfo? {
+                    return appWidget
+                }
+
+                override fun getErrorView(): android.view.View? {
+                    // Provide custom error view
+                    val errorView = android.widget.TextView(context)
+                    errorView.text = "⚠ Widget Error\n${appWidget?.label ?: "Unknown"}"
+                    errorView.gravity = android.view.Gravity.CENTER
+                    errorView.setTextColor(0xFF666666.toInt())
+                    errorView.setBackgroundColor(0xFFEEEEEE.toInt())
+                    errorView.setPadding(32, 32, 32, 32)
+                    return errorView
+                }
+
+                override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+                    try {
+                        super.onLayout(changed, left, top, right, bottom)
+                    } catch (e: RuntimeException) {
+                        Log.e(TAG, "Error during widget layout for ID $appWidgetId", e)
+                        // Switch to error view on layout failure
+                        post {
+                            try {
+                                val errorRemoteViews = android.widget.RemoteViews(
+                                    appWidget?.provider?.packageName ?: context.packageName,
+                                    0
+                                )
+                                updateAppWidget(errorRemoteViews)
+                            } catch (ex: Exception) {
+                                Log.e(TAG, "Failed to switch to error view", ex)
+                            }
+                        }
+                    }
+                }
+
+                override fun updateAppWidget(remoteViews: android.widget.RemoteViews?) {
+                    if (remoteViews == null) {
+                        Log.d(TAG, "updateAppWidget called with null RemoteViews for ID $appWidgetId")
+                        super.updateAppWidget(null)
+                        return
+                    }
+
+                    try {
+                        Log.d(TAG, "Updating widget ID $appWidgetId with RemoteViews from package: ${remoteViews.`package`}")
+                        super.updateAppWidget(remoteViews)
+                        Log.d(TAG, "Widget ID $appWidgetId updated successfully")
+                    } catch (e: android.content.res.Resources.NotFoundException) {
+                        Log.e(TAG, "Resource not found for widget ID $appWidgetId: ${e.message}", e)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error updating widget ID $appWidgetId: ${e.message}", e)
+                    }
+                }
+            }
         }
 
         override fun onProviderChanged(appWidgetId: Int, appWidget: AppWidgetProviderInfo?) {
@@ -180,11 +257,22 @@ class WidgetHostManager(private val context: Context) {
         container: ViewGroup,
         showToast: Boolean = true
     ) {
-        Log.d(TAG, "Adding widget: ${widgetInfo.label}")
+        Log.d(TAG, "Adding widget: ${widgetInfo.label} from package: ${widgetInfo.provider.packageName}")
+        Log.d(TAG, "Widget class: ${widgetInfo.provider.className}")
 
         try {
-            // Create the widget view
-            val widgetView = appWidgetHost.createView(context, widgetId, widgetInfo)
+            // Create the widget view with error handling
+            val widgetView = try {
+                appWidgetHost.createView(context, widgetId, widgetInfo)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create widget view for ${widgetInfo.label}", e)
+                // Clean up the allocated widget ID
+                appWidgetHost.deleteAppWidgetId(widgetId)
+                if (showToast) {
+                    Toast.makeText(context, "Couldn't load widget: ${widgetInfo.label}\n${e.message}", Toast.LENGTH_LONG).show()
+                }
+                return
+            }
 
             // Calculate proper widget dimensions
             val widgetDimensions = calculateWidgetDimensions(widgetInfo, container)
@@ -221,10 +309,17 @@ class WidgetHostManager(private val context: Context) {
             // Update widget size after layout
             widgetView.post {
                 updateWidgetSize(widgetView, widgetId, widgetInfo)
-            }
 
-            // Trigger initial update
-            widgetView.updateAppWidget(null)
+                // Trigger initial update after layout is complete
+                widgetView.postDelayed({
+                    try {
+                        widgetView.updateAppWidget(null)
+                        Log.d(TAG, "Initial widget update complete for ID: $widgetId")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to update widget after layout for ID: $widgetId", e)
+                    }
+                }, 100) // Small delay to ensure layout is complete
+            }
 
             // Ensure the widget host is still listening
             ensureHostListening()

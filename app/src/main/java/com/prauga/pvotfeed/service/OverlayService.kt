@@ -27,8 +27,9 @@ class OverlayService(): Service() {
 
         // Initialize widget management components if not already created
         if (widgetHostManager == null) {
+            // Use application context for better system package access
             widgetHostManager = WidgetHostManager(applicationContext)
-            Log.d(TAG, "WidgetHostManager created")
+            Log.d(TAG, "WidgetHostManager created with application context")
         }
 
         if (widgetDataStore == null) {
