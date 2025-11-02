@@ -318,32 +318,29 @@ class WidgetHostManager(private val context: Context) {
             // Tag the widget view with its ID for easy lookup
             widgetView.tag = widgetId
 
-            // Enable auto-advance for widgets that support it (like photo frames)
-            widgetView.setAppWidget(widgetId, widgetInfo)
-
             // Store the widget
             activeWidgets[widgetId] = widgetView
 
-            // Add to container
+            // Ensure the widget host is listening BEFORE adding the view
+            ensureHostListening()
+
+            // Add to container FIRST - this attaches the view to the window
             container.addView(widgetView)
+
+            // NOW set the app widget info - this will trigger the initial RemoteViews update
+            // The view needs to be attached to the window before receiving updates
+            widgetView.setAppWidget(widgetId, widgetInfo)
+            Log.d(TAG, "Widget ID $widgetId setAppWidget called, initial update should trigger automatically")
 
             // Update widget size after layout
             widgetView.post {
-                updateWidgetSize(widgetView, widgetId, widgetInfo)
-
-                // Trigger initial update after layout is complete
-                widgetView.postDelayed({
-                    try {
-                        widgetView.updateAppWidget(null)
-                        Log.d(TAG, "Initial widget update complete for ID: $widgetId")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to update widget after layout for ID: $widgetId", e)
-                    }
-                }, 100) // Small delay to ensure layout is complete
+                try {
+                    updateWidgetSize(widgetView, widgetId, widgetInfo)
+                    Log.d(TAG, "Widget ID $widgetId size updated after layout")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to update widget size for ID: $widgetId", e)
+                }
             }
-
-            // Ensure the widget host is still listening
-            ensureHostListening()
 
             if (showToast) {
                 Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
