@@ -181,14 +181,88 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
             widgetPickerView = WidgetPickerView(context)
         }
 
-        // Restore previously saved widgets
-        try {
-            restoreSavedWidgets()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to restore saved widgets", e)
+        // Check for first launch
+        val isFirstLaunch = context.getSharedPreferences("widget_prefs", Context.MODE_PRIVATE)
+            .getBoolean("first_launch", true)
+
+        if (isFirstLaunch) {
+            addDefaultWidgets()
+
+            // Mark first launch as complete
+            context.getSharedPreferences("widget_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("first_launch", false)
+                .apply()
+        } else {
+            // Restore previously saved widgets
+            try {
+                restoreSavedWidgets()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore saved widgets", e)
+            }
         }
 
         Log.d(TAG, "Widget system initialized")
+    }
+
+    private fun addDefaultWidgets() {
+        // List of default widgets to add
+        val defaultWidgets = listOf(
+            // Cromite search widget
+            ComponentName(
+                "org.cromite.cromite",
+                "org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider\$QuickActionSearchWidgetProviderSearch"
+            )
+        )
+
+        defaultWidgets.forEach { componentName ->
+            try {
+                addWidgetByComponentName(componentName)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add default widget: $componentName", e)
+            }
+        }
+    }
+
+    private fun addWidgetByComponentName(componentName: ComponentName) {
+        try {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+
+            // Get all installed widgets
+            val installedProviders = appWidgetManager.installedProviders
+
+            // Find the widget provider matching the component name
+            val providerInfo = installedProviders.firstOrNull {
+                it.provider == componentName
+            }
+
+            if (providerInfo == null) {
+                Log.w(TAG, "Widget provider not found: $componentName")
+                Log.d(TAG, "Available providers: ${installedProviders.map { it.provider }}")
+                return
+            }
+
+            // Allocate a widget ID
+            val widgetId = widgetHostManager.allocateWidgetId()
+
+            // Bind the widget
+            val bindSuccess = appWidgetManager.bindAppWidgetIdIfAllowed(
+                widgetId,
+                componentName
+            )
+
+            if (!bindSuccess) {
+                Log.e(TAG, "Failed to bind widget: ${providerInfo.label}")
+                widgetHostManager.deleteWidgetId(widgetId)
+                return
+            }
+
+            widgetHostManager.addWidgetToContainer(widgetId, providerInfo, widgetContainer, showToast = false)
+            saveWidgetInfo(widgetId, providerInfo)
+            Log.d(TAG, "Default widget added successfully: ${providerInfo.label}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding widget by component name: $componentName", e)
+        }
     }
 
     private fun restoreSavedWidgets() {
