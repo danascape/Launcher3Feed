@@ -294,20 +294,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
         super.onScroll(progress)
         Log.d(TAG, "onScroll: $progress")
 
-        val isDarkMode = (context.resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-
-        // Calculate alpha based on progress (0.0 to 1.0)
-        // Progress ranges from 0 (fully closed) to 1 (fully open)
-        val alpha = (progress * 255).toInt().coerceIn(0, 255)
-
-        val color = if (isDarkMode) {
-            Color.argb(alpha, 38, 38, 38)
-        } else {
-            Color.argb(alpha, 192, 192, 192)
-        }
-
-        window?.setBackgroundDrawable(ColorDrawable(color))
+        window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
     }
 
     private fun launchWidgetPicker() {
@@ -504,19 +491,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     override fun applyNewTransparency(value: Float) {
         Log.d(TAG, "applyNewTransparency: $value")
 
-        val isDarkMode = (context.resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-
-        // Calculate alpha based on transparency value
-        val alpha = (value * 255).toInt().coerceIn(0, 255)
-
-        val color = if (isDarkMode) {
-            Color.argb(alpha, 38, 38, 38)
-        } else {
-            Color.argb(alpha, 192, 192, 192)
-        }
-
-        window?.setBackgroundDrawable(ColorDrawable(color))
+        window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
     }
 
     override fun onClientMessage(action: String) {
