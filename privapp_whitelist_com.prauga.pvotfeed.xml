@@ -4,6 +4,9 @@
         <permission name="android.permission.BIND_APPWIDGET"/>
         <permission name="android.permission.READ_DEVICE_CONFIG"/>
         <permission name="android.permission.START_WIDGET_PICKER_ACTIVITY"/>
+        <permission name="android.permission.QUERY_ALL_PACKAGES"/>
+        <permission name="android.permission.READ_CALENDAR"/>
+        <permission name="android.permission.READ_CONTACTS"/>
         <permission name="com.android.launcher3.permission.START_WIDGET_PICKER_ACTIVITY"/>
     </privapp-permissions>
 </permissions>

@@ -80,6 +80,27 @@ class WidgetHostManager(private val context: Context) {
                     return errorView
                 }
 
+                override fun onAttachedToWindow() {
+                    super.onAttachedToWindow()
+                    Log.d(TAG, "Widget ID $appWidgetId attached to window")
+                }
+
+                override fun onDetachedFromWindow() {
+                    super.onDetachedFromWindow()
+                    Log.d(TAG, "Widget ID $appWidgetId detached from window")
+                }
+
+                override fun onWindowVisibilityChanged(visibility: Int) {
+                    super.onWindowVisibilityChanged(visibility)
+                    val visibilityStr = when(visibility) {
+                        android.view.View.VISIBLE -> "VISIBLE"
+                        android.view.View.INVISIBLE -> "INVISIBLE"
+                        android.view.View.GONE -> "GONE"
+                        else -> "UNKNOWN($visibility)"
+                    }
+                    Log.d(TAG, "Widget ID $appWidgetId window visibility changed to: $visibilityStr")
+                }
+
                 override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
                     try {
                         super.onLayout(changed, left, top, right, bottom)
