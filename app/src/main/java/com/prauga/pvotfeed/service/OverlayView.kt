@@ -96,10 +96,22 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
         try {
             Log.d(TAG, "Initializing widget system...")
 
-            // Initialize widget managers
-            widgetHostManager = WidgetHostManager(context)
+            // Get shared widget managers from service (they persist across configuration changes)
+            val sharedHostManager = OverlayService.getWidgetHostManager()
+            val sharedDataStore = OverlayService.getWidgetDataStore()
+
+            if (sharedHostManager != null && sharedDataStore != null) {
+                widgetHostManager = sharedHostManager
+                widgetDataStore = sharedDataStore
+                Log.d(TAG, "Using shared widget managers from service")
+            } else {
+                // Fallback: create local instances (shouldn't happen if service is running)
+                Log.w(TAG, "Service managers not available, creating local instances")
+                widgetHostManager = WidgetHostManager(context)
+                widgetDataStore = WidgetDataStore(context)
+            }
+
             widgetPickerHelper = WidgetPickerHelper(context)
-            widgetDataStore = WidgetDataStore(context)
             Log.d(TAG, "Widget managers initialized")
 
             // Set up broadcast receiver for widget picker results
@@ -183,8 +195,43 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
         val savedWidgets = widgetDataStore.loadAllWidgets()
         Log.d(TAG, "Restoring ${savedWidgets.size} saved widgets")
 
-        // TODO: Restore widgets from saved data
-        // This would recreate the widget views from saved widget IDs
+        if (savedWidgets.isEmpty()) {
+            Log.d(TAG, "No saved widgets to restore")
+            return
+        }
+
+        // Clear the container and active views before restoring
+        widgetContainer.removeAllViews()
+        widgetHostManager.clearActiveViews()
+        Log.d(TAG, "Container and active views cleared, ready for restoration")
+
+        val appWidgetManager = AppWidgetManager.getInstance(context)
+
+        // Restore widgets in order of their position
+        savedWidgets.sortedBy { it.position }.forEach { savedWidget ->
+            try {
+                Log.d(TAG, "Attempting to restore widget: ${savedWidget.label} (ID: ${savedWidget.widgetId})")
+
+                // Get the widget provider info for this widget ID
+                val widgetInfo = appWidgetManager.getAppWidgetInfo(savedWidget.widgetId)
+
+                if (widgetInfo != null) {
+                    // Widget is still valid, add it to the container
+                    Log.d(TAG, "Restoring widget: ${widgetInfo.label}")
+                    widgetHostManager.addWidgetToContainer(savedWidget.widgetId, widgetInfo, widgetContainer, showToast = false)
+                } else {
+                    // Widget ID is no longer valid, remove it from saved data
+                    Log.w(TAG, "Widget ID ${savedWidget.widgetId} is no longer valid, removing from saved data")
+                    widgetDataStore.removeWidget(savedWidget.widgetId)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore widget: ${savedWidget.label}", e)
+                // Optionally remove the widget from saved data if restoration fails
+                widgetDataStore.removeWidget(savedWidget.widgetId)
+            }
+        }
+
+        Log.d(TAG, "Widget restoration complete")
     }
 
     private fun setupTouchListeners() {
@@ -292,7 +339,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
 
     override fun onScroll(progress: Float) {
         super.onScroll(progress)
-        Log.d(TAG, "onScroll: $progress")
+        //Log.d(TAG, "onScroll: $progress")
 
         window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
     }
@@ -417,28 +464,40 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     }
 
     private fun saveWidgetInfo(widgetId: Int, widgetInfo: android.appwidget.AppWidgetProviderInfo) {
+        // Widget has already been added to container, so use count - 1 for 0-indexed position
+        val position = maxOf(0, widgetContainer.getWidgetCount() - 1)
         val info = WidgetDataStore.WidgetInfo(
             widgetId = widgetId,
             packageName = widgetInfo.provider.packageName,
             className = widgetInfo.provider.className,
             label = widgetInfo.loadLabel(context.packageManager),
-            position = widgetContainer.getWidgetCount()
+            position = position
         )
         widgetDataStore.saveWidget(info)
+        Log.d(TAG, "Saved widget info: ${info.label} at position $position")
     }
 
+    /**
+     * Remove a widget from both the container and data store
+     */
+    private fun removeWidgetById(widgetId: Int) {
+        try {
+            widgetHostManager.removeWidget(widgetId, widgetContainer)
+            widgetDataStore.removeWidget(widgetId)
+            Log.d(TAG, "Widget removed: ID $widgetId")
+            Toast.makeText(context, "Widget removed", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to remove widget: ID $widgetId", e)
+            Toast.makeText(context, "Failed to remove widget", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onDestroy() {
         super.onDestroy()
 
-        // Clean up widget manager if initialized
-        if (::widgetHostManager.isInitialized) {
-            try {
-                widgetHostManager.onDestroy()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error destroying widget host manager", e)
-            }
-        }
+        // NOTE: Do NOT destroy widgetHostManager here - it's owned by the Service
+        // and needs to persist across configuration changes
+        Log.d(TAG, "OverlayView onDestroy - keeping widget host alive for service")
 
         FeedApp.bridge.setCallback(null)
 
@@ -547,7 +606,7 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        Log.d(TAG, "dispatchTouchEvent: action=${ev.action}, x=${ev.x}, y=${ev.y}")
+        //Log.d(TAG, "dispatchTouchEvent: action=${ev.action}, x=${ev.x}, y=${ev.y}")
 
         // Check if the touch is on the buttons
         if (isEditMode) {

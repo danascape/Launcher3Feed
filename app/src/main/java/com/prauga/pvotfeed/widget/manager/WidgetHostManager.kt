@@ -177,7 +177,8 @@ class WidgetHostManager(private val context: Context) {
     fun addWidgetToContainer(
         widgetId: Int,
         widgetInfo: AppWidgetProviderInfo,
-        container: ViewGroup
+        container: ViewGroup,
+        showToast: Boolean = true
     ) {
         Log.d(TAG, "Adding widget: ${widgetInfo.label}")
 
@@ -228,12 +229,16 @@ class WidgetHostManager(private val context: Context) {
             // Ensure the widget host is still listening
             ensureHostListening()
 
-            Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
+            if (showToast) {
+                Toast.makeText(context, "Widget added: ${widgetInfo.label}", Toast.LENGTH_SHORT).show()
+            }
             Log.d(TAG, "Widget added successfully with ID: $widgetId, size: ${widgetDimensions.width}x${widgetDimensions.height}")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add widget to container", e)
-            Toast.makeText(context, "Error adding widget: ${e.message}", Toast.LENGTH_SHORT).show()
+            if (showToast) {
+                Toast.makeText(context, "Error adding widget: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -335,6 +340,7 @@ class WidgetHostManager(private val context: Context) {
 
     /**
      * Remove a widget from the container
+     * Note: This also deletes the widget ID from the host
      */
     fun removeWidget(widgetId: Int, container: ViewGroup) {
         val widgetView = activeWidgets[widgetId]
@@ -343,6 +349,14 @@ class WidgetHostManager(private val context: Context) {
             activeWidgets.remove(widgetId)
             appWidgetHost.deleteAppWidgetId(widgetId)
             Log.d(TAG, "Widget removed: $widgetId")
+        } else {
+            // Widget view not found in active widgets, but still try to delete the ID
+            Log.w(TAG, "Widget view not found for ID $widgetId, deleting ID anyway")
+            try {
+                appWidgetHost.deleteAppWidgetId(widgetId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to delete widget ID: $widgetId", e)
+            }
         }
     }
 
@@ -412,6 +426,15 @@ class WidgetHostManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error in onPause", e)
         }
+    }
+
+    /**
+     * Clear active widget views without destroying the host
+     * Use this when recreating the overlay view but keeping widgets alive
+     */
+    fun clearActiveViews() {
+        Log.d(TAG, "Clearing ${activeWidgets.size} active widget views (host stays alive)")
+        activeWidgets.clear()
     }
 
     /**
