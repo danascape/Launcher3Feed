@@ -307,7 +307,9 @@ class WidgetHostManager(private val context: Context) {
             ).apply {
                 // Add margin for better spacing
                 val margin = (16 * context.resources.displayMetrics.density).toInt()
-                setMargins(margin, margin, margin, margin)
+                val isFirstWidget = container.childCount == 0
+                val topMargin = if (isFirstWidget) 0 else margin
+                setMargins(margin, topMargin, margin, margin)
             }
             widgetView.layoutParams = layoutParams
 
