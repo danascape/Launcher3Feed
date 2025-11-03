@@ -206,19 +206,21 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
     }
 
     private fun addDefaultWidgets() {
-        // List of default widgets to add
-        val defaultWidgets = listOf(
-            ComponentName(
-                "com.prauga.pvotwidgets",
-                "com.prauga.pvotwidgets.PvotWidgetProvider"
-            ),
-        )
+        val defaultWidgetStrings = context.resources.getStringArray(R.array.default_widgets)
 
-        defaultWidgets.forEach { componentName ->
+        defaultWidgetStrings.forEach { widgetString ->
             try {
+                // packageName/className
+                val parts = widgetString.split("/")
+                if (parts.size != 2) {
+                    Log.w(TAG, "Invalid default widget format: $widgetString (expected: packageName/className)")
+                    return@forEach
+                }
+
+                val componentName = ComponentName(parts[0], parts[1])
                 addWidgetByComponentName(componentName)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to add default widget: $componentName", e)
+                Log.e(TAG, "Failed to add default widget: $widgetString", e)
             }
         }
     }

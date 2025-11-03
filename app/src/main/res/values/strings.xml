@@ -4,4 +4,10 @@
     <string name="save_widgets">Done</string>
     <string name="popup_add_widget">Add Widget</string>
     <string name="popup_customise">Customise</string>
+
+    <!-- Default widgets to add on first launch -->
+    <!-- packageName/className -->
+    <string-array name="default_widgets">
+        <item>com.prauga.pvotwidgets/com.prauga.pvotwidgets.PvotWidgetProvider</item>
+    </string-array>
 </resources>
