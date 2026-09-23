@@ -15,18 +15,25 @@ import com.google.android.binder.ParcelUtils;
 
 public abstract class LauncherOverlayInterfaceBinder extends LauncherOverlayBinder implements ILauncherOverlay {
     private static final String INTERFACE_DESCRIPTOR = "com.google.android.libraries.launcherclient.ILauncherOverlay";
+    // Transaction codes are assigned by AIDL in declaration order, starting at 1.
+    // They must match ILauncherOverlay.aidl in Launcher3 exactly.
     private static final int TRANSACTION_START_SCROLL = 1;
     private static final int TRANSACTION_ON_SCROLL = 2;
     private static final int TRANSACTION_END_SCROLL = 3;
     private static final int TRANSACTION_WINDOW_ATTACHED_LAYOUT = 4;
-    private static final int TRANSACTION_REQUEST_VOICE_DETECTION = 5;
+    private static final int TRANSACTION_WINDOW_DETACHED = 5;
+    private static final int TRANSACTION_CLOSE_OVERLAY = 6;
     private static final int TRANSACTION_ON_PAUSE = 7;
     private static final int TRANSACTION_ON_RESUME = 8;
     private static final int TRANSACTION_OPEN_OVERLAY = 9;
-    private static final int TRANSACTION_WINDOW_DETACHED = 10;
-    private static final int TRANSACTION_IS_ENABLED = 13;
+    private static final int TRANSACTION_REQUEST_VOICE_DETECTION = 10;
+    private static final int TRANSACTION_GET_VOICE_SEARCH_LANGUAGE = 11;
+    private static final int TRANSACTION_IS_VOICE_DETECTION_RUNNING = 12;
+    private static final int TRANSACTION_HAS_OVERLAY_CONTENT = 13;
     private static final int TRANSACTION_WINDOW_ATTACHED_BUNDLE = 14;
-    private static final int TRANSACTION_CLOSE_OVERLAY = 16;
+    private static final int TRANSACTION_UNUSED_METHOD = 15;
+    private static final int TRANSACTION_SET_ACTIVITY_STATE = 16;
+    private static final int TRANSACTION_START_SEARCH = 17;
 
     protected LauncherOverlayInterfaceBinder() {
         attachInterface(this, INTERFACE_DESCRIPTOR);
@@ -65,26 +72,47 @@ public abstract class LauncherOverlayInterfaceBinder extends LauncherOverlayBind
             case TRANSACTION_OPEN_OVERLAY:
                 openOverlay(data.readInt());
                 break;
+            case TRANSACTION_CLOSE_OVERLAY:
+                closeOverlay(data.readInt());
+                break;
             case TRANSACTION_WINDOW_DETACHED:
                 windowDetached(ParcelUtils.readBoolean(data));
                 break;
-            case 11:
-                //Voice search is always enabled, so we don't need to check the version
+            case TRANSACTION_SET_ACTIVITY_STATE:
+                setActivityState(data.readInt());
                 break;
-            case 12:
-                // This method is not used in the current implementation, but we keep it for compatibility
+            case TRANSACTION_GET_VOICE_SEARCH_LANGUAGE:
+                // Not supported; answer the synchronous call so the client does not block.
+                if (reply != null) {
+                    reply.writeNoException();
+                    reply.writeString(null);
+                }
                 break;
-            case TRANSACTION_IS_ENABLED:
-                reply.writeNoException();
-                ParcelUtils.writeBoolean(reply, true);
+            case TRANSACTION_IS_VOICE_DETECTION_RUNNING:
+                if (reply != null) {
+                    reply.writeNoException();
+                    ParcelUtils.writeBoolean(reply, false);
+                }
+                break;
+            case TRANSACTION_HAS_OVERLAY_CONTENT:
+                if (reply != null) {
+                    reply.writeNoException();
+                    ParcelUtils.writeBoolean(reply, true);
+                }
                 break;
             case TRANSACTION_WINDOW_ATTACHED_BUNDLE:
                 Bundle bundle = ParcelUtils.readParcelable(data, Bundle.CREATOR);
                 callback = getCallbackFromBinder(data.readStrongBinder());
                 windowAttached(bundle, callback);
                 break;
-            case TRANSACTION_CLOSE_OVERLAY:
-                closeOverlay(data.readInt());
+            case TRANSACTION_UNUSED_METHOD:
+                break;
+            case TRANSACTION_START_SEARCH:
+                // Not supported; the client treats false as "handle it yourself".
+                if (reply != null) {
+                    reply.writeNoException();
+                    ParcelUtils.writeBoolean(reply, false);
+                }
                 break;
             default:
                 return false;
