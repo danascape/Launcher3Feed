@@ -23,6 +23,7 @@ class OverlayControllerBinder(
     private var callback: ILauncherOverlayCallback? = null
     var options: Int = 0
     private var lastAttachWasLandscape: Boolean = false
+    private var activityState: Int = 0
 
     private fun checkCallerId() {
         if (getCallingUid() != callerUid) {
@@ -64,6 +65,23 @@ class OverlayControllerBinder(
         checkCallerId()
         mainThreadHandler.removeMessages(6)
         Message.obtain(mainThreadHandler, 6, 1, 0, Pair.create(Bundle(), callback)).sendToTarget()
+    }
+
+    /**
+     * Called by the launcher on every lifecycle transition once it negotiates api version 4 or
+     * above, in place of [onPause] and [onResume].
+     *
+     * Bit 0 is "started", bit 1 is "resumed". The panel is only dismissed on the way out of
+     * resumed; arriving at resumed must leave an open panel alone.
+     */
+    override fun setActivityState(state: Int) {
+        checkCallerId()
+        val wasResumed = (activityState and 2) != 0
+        val isResumed = (state and 2) != 0
+        activityState = state
+        if (wasResumed && !isResumed) {
+            closeOverlay(0)
+        }
     }
 
     override fun requestVoiceDetection(start: Boolean) {

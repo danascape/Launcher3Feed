@@ -35,4 +35,7 @@ interface ILauncherOverlay : IInterface {
     fun onPause()
 
     fun onResume()
+
+    @Throws(RemoteException::class)
+    fun setActivityState(state: Int)
 }
