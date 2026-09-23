@@ -1,40 +1,54 @@
-package dev.danascape.launcher3feed.helloworld.service
+package dev.danascape.launcher3feed.core
 
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import com.google.android.libraries.gsa.d.a.OverlayController
-import dev.danascape.launcher3feed.helloworld.FeedApp
-import dev.danascape.launcher3feed.helloworld.R
 
-class OverlayView(private val context: Context) : OverlayController(context, R.style.AppTheme, R.style.WindowTheme),
+/**
+ * Base for the launcher -1 screen. Apps extend this and provide their content
+ * through [onCreateContentView].
+ */
+abstract class FeedOverlay @JvmOverloads constructor(
+    private val context: Context,
+    theme: Int = R.style.Theme_Launcher3Feed_Overlay,
+    windowTheme: Int = R.style.Theme_Launcher3Feed_OverlayWindow
+) : OverlayController(context, theme, windowTheme),
     OverlayBridge.OverlayBridgeCallback {
 
-    private lateinit var rootView: View
+    protected lateinit var rootView: View
+        private set
 
     companion object {
-        private const val TAG = "OverlayView"
+        private const val TAG = "FeedOverlay"
     }
+
+    /**
+     * View shown inside the overlay panel. It is attached to
+     * [container] by the base class.
+     */
+    protected abstract fun onCreateContentView(inflater: LayoutInflater, container: ViewGroup): View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate: Initializing OverlayView")
+        Log.d(TAG, "onCreate: Initializing overlay")
 
         if (container != null) {
-            rootView = View.inflate(context, R.layout.overlay_layout, null)
+            rootView = onCreateContentView(LayoutInflater.from(context), container)
             container.addView(rootView)
             Log.d(TAG, "Content view added to container")
         } else {
             Log.e(TAG, "Container is null!")
         }
 
-        // Register callback
-        FeedApp.bridge.setCallback(this)
+        OverlayBridge.setCallback(this)
 
-        Log.d(TAG, "OverlayView created successfully")
+        Log.d(TAG, "Overlay created successfully")
     }
 
     override fun onScroll(progress: Float) {
@@ -46,8 +60,8 @@ class OverlayView(private val context: Context) : OverlayController(context, R.s
 
     override fun onDestroy() {
         super.onDestroy()
-        FeedApp.bridge.setCallback(null)
-        Log.d(TAG, "OverlayView destroyed")
+        OverlayBridge.setCallback(null)
+        Log.d(TAG, "Overlay destroyed")
     }
 
     // OverlayBridge callback methods

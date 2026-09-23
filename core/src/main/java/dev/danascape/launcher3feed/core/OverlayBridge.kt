@@ -1,6 +1,6 @@
-package dev.danascape.launcher3feed.helloworld.service
+package dev.danascape.launcher3feed.core
 
-class OverlayBridge {
+object OverlayBridge {
     private var callback: OverlayBridgeCallback? = null
 
     fun setCallback(callback: OverlayBridgeCallback?) {

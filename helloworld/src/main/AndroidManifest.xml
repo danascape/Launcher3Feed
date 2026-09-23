@@ -3,10 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="dev.danascape.launcher3feed.helloworld">
 
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
     <application
-        android:name=".FeedApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -24,7 +21,7 @@
         </activity>
 
         <service
-            android:name=".service.OverlayService"
+            android:name=".HelloWorldOverlayService"
             android:enabled="true"
             android:exported="true"
             android:foregroundServiceType="shortService">

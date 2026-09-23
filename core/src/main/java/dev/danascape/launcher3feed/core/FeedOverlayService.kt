@@ -1,12 +1,15 @@
-package dev.danascape.launcher3feed.helloworld.service
+package dev.danascape.launcher3feed.core
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import com.google.android.libraries.gsa.d.a.OverlaysController
 
-class OverlayService(): Service() {
+abstract class FeedOverlayService : Service() {
     private lateinit var overlaysController: OverlaysController
+
+    abstract fun createOverlay(context: Context): FeedOverlay
 
     override fun onCreate() {
         super.onCreate()

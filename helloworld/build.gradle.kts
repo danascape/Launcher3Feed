@@ -53,7 +53,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":google-gsa"))
+    implementation(project(":core"))
 
     // Core Android dependencies only
     implementation(libs.androidx.core.ktx)
