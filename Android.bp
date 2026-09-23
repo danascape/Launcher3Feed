@@ -45,3 +45,32 @@ android_app {
         enabled: false,
     },
 }
+
+// Glancehub bridge for lockscreen widgets
+// Requires: https://github.com/danascape/platform_frameworks_base/commit/cb69df1fbe126aa771fcd0986965a19d320d6e11
+android_app {
+    name: "Launcher3FeedGlance",
+    defaults: ["platform_app_defaults"],
+
+    platform_apis: true,
+    certificate: "platform",
+    system_ext_specific: true,
+    privileged: true,
+
+    srcs: [
+        "glance/src/main/java/**/*.java",
+        "glance/src/main/java/**/*.kt",
+    ],
+
+    static_libs: [
+        "Launcher3FeedLib",
+        "SystemUISharedLib",
+    ],
+
+    resource_dirs: ["glance/src/main/res"],
+    manifest: "glance/src/main/AndroidManifest.xml",
+
+    optimize: {
+        enabled: false,
+    },
+}

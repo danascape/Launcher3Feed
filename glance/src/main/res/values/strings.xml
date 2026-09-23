@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Launcher3 Feed Glance</string>
+    <string name="glance_empty">No widgets on the Glanceable Hub yet</string>
+    <string name="glance_unavailable">Glanceable Hub is unavailable</string>
+    <string name="glance_add_widget">Add widget</string>
+    <string name="glance_remove">Remove</string>
+    <string name="glance_done">Done</string>
+    <string name="glance_removed">Widget removed from the hub</string>
+</resources>
